@@ -3,38 +3,28 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import math
 from scipy.linalg import svd
+from scipy.stats import zscore
 
-# Load dataset and convert the dataframe to numpy array
+# Load dataset and convert to numpy array
 filename = 'Data/abalone.csv'
 df = pd.read_csv(filename)
 raw_data = df.values  
-#print(raw_data)
-#print('data shape', raw_data.shape)
-
-# Data matrix X 
 cols = range(1, 9) 
 X = raw_data[:, cols].astype(np.float64)
-#print('X', X)
 
-# Extract the attribute names from the header of the csv
 attributeNames = np.asarray(df.columns[cols])
-#print(attributeNames)
-
-# Extract the strings for each sample from the first column
 classLabels = raw_data[:, 0] 
-print('class labels', classLabels)
-
-# Save the 3 class labels 
+#print('class labels', classLabels)
 classNames = np.unique(classLabels)
-#print('class names', classNames)
 
 # Extract class names and encode with integers (dict)
 classDict = dict(zip(classNames,range(len(classNames))))
 #print('class dictionary', classDict)
 
 y = np.array([classDict[v] for v in classLabels])
-print('y', y)
+#print('y', y)
 
 N, M = X.shape
 print('N data objects = ', N, 'M attributes = ', M)
@@ -73,14 +63,64 @@ for i in ax.patches:
 
 ax.set_title('Attributes and their standard deviation',
              loc ='center')
-#########################################################################
 
+# Box plot of each attribute
+plt.figure()
+plt.title('Abalone: Boxplot')
+plt.boxplot(X)
+plt.xticks(range(1,M+1), attributeNames, fontsize=6, rotation=30)
+
+#########################################################################
 
 ### STANDARDIZED DATA ###
 # CenteredData = X - np.ones((N,1))*X.mean(axis=0)
 Y = X - np.ones((N, 1))*X.mean(axis=0)
 Y = Y*(1/np.std(Y,0))
+print('Standardized data', Y)
 
+### FINDING THE OUTLIERS ###
+# Box plot of each attribute after standardization
+plt.figure()
+plt.title('Abalone: Boxplot Standardized Data')
+plt.boxplot(Y)
+plt.xticks(range(1,M+1), attributeNames, fontsize=6, rotation=30)
+
+# Plot histograms of all attributes.
+plt.figure()
+u = int(np.floor(np.sqrt(M))); v = int(np.ceil(int(M)/u))
+
+for i in range(M):
+    plt.subplot(u,v,i+1)
+    plt.hist(Y[:,i])
+    plt.xlabel(attributeNames[i])
+    plt.ylim(0, N) # Make the y-axes equal for improved readability
+    if i%v!=0: plt.yticks([])
+    if i==0: plt.title('Abalone: Histogram after standardization')
+
+# Remove outliers from standardized data
+print('Height column: ', Y[:,2])
+outlier_mask = (Y[:,2] > 8)
+print('Outlier mask', outlier_mask)
+valid_mask = np.logical_not(outlier_mask)
+
+Y = Y[valid_mask,:]
+print('Y', Y)
+y = y[valid_mask]
+print('y', y)
+N = len(y)
+print('N', N)
+
+plt.figure(figsize=(14,9))
+u = int(np.floor(np.sqrt(M))); v = int(np.ceil(float(M)/u))
+for i in range(M):
+    plt.subplot(u,v,i+1)
+    plt.hist(Y[:,i])
+    plt.xlabel(attributeNames[i])
+    plt.ylim(0, N) # Make the y-axes equal for improved readability
+    if i%v!=0: plt.yticks([])
+    if i==0: plt.title('Abalone Histogram after outlier detection')
+
+########################### PCA ##########################################
 # PCA by computing Singular Value Decomposition of y
 # S matrix with the singular values (square root of the eigenvalues)
 U, S, Vh = svd(Y, full_matrices=False)
@@ -112,73 +152,65 @@ plt.grid()
 plt.savefig('Abalone_PCA.png')
 
 
-'''
-Data = [CenteredData, StandardizedData]
-titles = ['Centered Data', 'Standardized Data']
-threshold = 0.9
-# Choose two PCs to plot the projection
+# Simple Visualization of the first two attributes
+fig = plt.figure()
+plt.title('Abalone data')
+
+# Data attributes to be plotted are the first 2 f.ex.
 i = 0
 j = 1
 
-# Make the plot
-plt.figure(figsize=(10,15))
-plt.subplots_adjust(hspace=.5)
-plt.title('Abalone: Effect of standardization')
-nrows=3
-ncols=2
-for k in range(2):
-    # Obtain the PCA solution by calculate the SVD
-    U,S,Vh = svd(Data[k],full_matrices=False)
-    V=Vh.T # For the direction of V to fit the convention in the course we transpose
-    # For visualization purposes, we flip the directionality of the
-    # principal directions such that the directions match for Y1 and Y2.
-    if k==1: V = -V; U = -U; 
-    
-    # Compute variance explained
-    rho = (S*S) / (S*S).sum() 
-    
-    # Compute the projection onto the principal components
-    Z = U*S;
-    
-    # Plot projection
-    plt.subplot(nrows, ncols, 1+k)
-    C = len(classNames)
-    for c in range(C):
-        plt.plot(Z[y==c,i], Z[y==c,j], '.', alpha=.5)
-    plt.xlabel('PC'+str(i+1))
-    plt.ylabel('PC'+str(j+1))
-    plt.title(titles[k] + '\n' + 'Projection' )
-    plt.legend(classNames)
-    plt.axis('equal')
-    
-    # Plot attribute coefficients in principal component space
-    plt.subplot(nrows, ncols,  3+k)
-    for att in range(V.shape[1]):
-        plt.arrow(0,0, V[att,i], V[att,j])
-        plt.text(V[att,i], V[att,j], attributeNames[att])
-    plt.xlim([-1,1])
-    plt.ylim([-1,1])
-    plt.xlabel('PC'+str(i+1))
-    plt.ylabel('PC'+str(j+1))
-    plt.grid()
-    # Add a unit circle
-    plt.plot(np.cos(np.arange(0, 2*np.pi, 0.01)), 
-         np.sin(np.arange(0, 2*np.pi, 0.01)));
-    plt.title(titles[k] +'\n'+'Attribute coefficients')
-    plt.axis('equal')
-            
-    # Plot cumulative variance explained
-    plt.subplot(nrows, ncols,  5+k);
-    plt.plot(range(1,len(rho)+1),rho,'x-')
-    plt.plot(range(1,len(rho)+1),np.cumsum(rho),'o-')
-    plt.plot([1,len(rho)],[threshold, threshold],'k--')
-    plt.title('Variance explained by principal components');
-    plt.xlabel('Principal component');
-    plt.ylabel('Variance explained');
-    plt.legend(['Individual','Cumulative','Threshold'])
-    plt.grid()
-    plt.title(titles[k]+'\n'+'Variance explained')
+for c in range(C):
+    # select indices belonging to class c:
+    class_mask = y==c
+    plt.plot(Y[class_mask,i], Y[class_mask,j], 'o',alpha=.3)
 
-'''
+plt.legend(classNames)
+plt.xlabel(attributeNames[i])
+plt.ylabel(attributeNames[j])
+plt.show()
+
+# Compute the projection onto the principal components
+Z = U*S;  
+print('Z', Z)
+
+# Choose two PCs to plot the projection
+i = 0
+j = 1  
+# Plot projection
+plt.figure()
+C = len(classNames)
+for c in range(C):
+    plt.plot(Z[y==c,i], Z[y==c,j], '.', alpha=.5)
+plt.xlabel('PC'+str(i+1))
+plt.ylabel('PC'+str(j+1))
+plt.title('Projection: PCA' )
+plt.legend(classNames)
+plt.axis('equal')
+
+
+
+plt.figure()
+pcs = [0,1,2]
+legendStrs = ['PC'+str(e+1) for e in pcs]
+c = ['r','g','b']
+bw = .2
+r = np.arange(1,M+1)
+for i in pcs:    
+    plt.bar(r+i*bw, V[:,i], width=bw)
+plt.xticks(r+bw, r)
+plt.xlabel('Attributes')
+plt.ylabel('Component coefficients')
+plt.legend(legendStrs)
+plt.grid()
+plt.title('Abalone: PCA Component Coefficients')
+
+print('PC1:')
+print(V[:,0].T)
+print('PC2:')
+print(V[:,1].T)
+print('PC3:')
+print(V[:,2].T)
+
 plt.show()
         
