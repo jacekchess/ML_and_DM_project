@@ -28,6 +28,10 @@ plt.boxplot(data.Height)
 # %%
 data = data[data.Height < 0.4]
 
+
+
+### Regression
+
 # Train test split
 # %%
 X = data.drop('Rings', axis=1).to_numpy()
@@ -62,8 +66,40 @@ y_test = scaler_y.transform(y_test.reshape(-1, 1))
 columns = ['Is_F', 'Is_I', 'Is_M', 'Length', 'Diameter', 'Height', 'Whole weight', 'Shucked weight',
        'Viscera weight', 'Shell weight']
 
-pd.DataFrame(X_train, columns = columns).to_csv('../data/X_train.csv', header=True, index=False)
-pd.DataFrame(X_test, columns = columns).to_csv('../data/X_test.csv', header=True, index=False)
+pd.DataFrame(X_train, columns = columns).to_csv('../data/regression/X_train.csv', header=True, index=False)
+pd.DataFrame(X_test, columns = columns).to_csv('../data/regression/X_test.csv', header=True, index=False)
 
-pd.DataFrame(y_train, columns = ['Rings']).to_csv('../data/y_train.csv', header=True, index=False)
-pd.DataFrame(y_test, columns = ['Rings']).to_csv('../data/y_test.csv', header=True, index=False)
+pd.DataFrame(y_train, columns = ['Rings']).to_csv('../data/regression/y_train.csv', header=True, index=False)
+pd.DataFrame(y_test, columns = ['Rings']).to_csv('../data/regression/y_test.csv', header=True, index=False)
+
+
+
+### Classification
+
+# Train test split
+# %%
+X = data.drop('Sex', axis=1).to_numpy()
+y = data['Sex'].to_numpy()
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.25, random_state=42)
+
+
+# Standardization
+# %%
+scaler_X = StandardScaler()
+scaler_X = scaler_X.fit(X_train)
+
+X_train = scaler_X.transform(X_train)
+X_test = scaler_X.transform(X_test)
+
+# Save datasets
+# %%
+columns = ['Length', 'Diameter', 'Height', 'Whole weight', 'Shucked weight',
+       'Viscera weight', 'Shell weight', 'Rings']
+
+pd.DataFrame(X_train, columns = columns).to_csv('../data/classification/X_train.csv', header=True, index=False)
+pd.DataFrame(X_test, columns = columns).to_csv('../data/classification/X_test.csv', header=True, index=False)
+
+pd.DataFrame(y_train, columns = ['Sex']).to_csv('../data/classification/y_train.csv', header=True, index=False)
+pd.DataFrame(y_test, columns = ['Sex']).to_csv('../data/classification/y_test.csv', header=True, index=False)
