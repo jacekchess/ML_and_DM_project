@@ -2,7 +2,7 @@
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import LinearRegression, Ridge, Lasso
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import accuracy_score
 from sklearn.dummy import DummyRegressor
 import matplotlib.pyplot as plt
 from sklearn.model_selection import cross_val_score
@@ -10,50 +10,13 @@ from sklearn.model_selection import KFold
 import torch
 from scipy.stats import ttest_ind
 
-X_test = pd.read_csv('../data/regression/X_test.csv').to_numpy()
-X_train = pd.read_csv('../data/regression/X_train.csv').to_numpy()
-y_test = pd.read_csv('../data/regression/y_test.csv').to_numpy()
-y_train = pd.read_csv('../data/regression/y_train.csv').to_numpy()
+X_test = pd.read_csv('../data/classification/X_test.csv').to_numpy()
+X_train = pd.read_csv('../data/classification/X_train.csv').to_numpy()
+y_test = pd.read_csv('../data/classification/y_test.csv').to_numpy()
+y_train = pd.read_csv('../data/classification/y_train.csv').to_numpy()
 
 
-# %%
-CV = KFold(n_splits=10, shuffle=True)
-alphas = [1, 2, 3, 4, 5]
-errors = np.zeros((len(alphas) + 1, 10))
-
-k = 0
-for train_index, test_index in CV.split(X_train):
-    X_train_CV, X_valid_CV = X_train[train_index], X_train[test_index]
-    y_train_CV, y_valid_CV = y_train[train_index], y_train[test_index]
-
-    regression = LinearRegression().fit(X_train_CV, y_train_CV)
-    errors[0, k] = mean_squared_error(y_valid_CV, regression.predict(X_valid_CV))
-
-    for i, alpha in enumerate(alphas):
-        ridge = Ridge(alpha).fit(X_train_CV, y_train_CV)
-        errors[i + 1, k] = mean_squared_error(y_valid_CV, ridge.predict(X_valid_CV))
-
-    k += 1
-
-errors = np.mean(errors, axis = 1)
-# %%
-plt.plot([0] + alphas, errors)
-
-# %%
-ridge = Ridge(1).fit(X_train, y_train)
-predicted_value = ridge.predict(X_test)[0]
-coeficience = ridge.coef_
-
-print('Coeficience: ', np.round(coeficience, 2))
-print('Feature values: ', np.round(X_test[0], 2))
-print('Predicted value: ', np.round(predicted_value, 2))
-print('True value: ', np.round(y_test[0], 2))
-
-# %%
-dummy = DummyRegressor().fit(X_train, y_train)
-mean_squared_error(y_test, dummy.predict(X_test))
-
-# %%
+# Some function from course materials. I didn't check it but it works
 def train_neural_net(model, loss_fn, X, y,
                      n_replicates=3, max_iter = 10000, tolerance=1e-6):
     
@@ -114,66 +77,36 @@ def train_neural_net(model, loss_fn, X, y,
 
 
 
-# %%
-summaries, summaries_axes = plt.subplots(1,2, figsize=(10,5))
-# Make a list for storing assigned color of learning curve for up to K=10
-color_list = ['tab:orange', 'tab:green', 'tab:purple', 'tab:brown', 'tab:pink',
-              'tab:gray', 'tab:olive', 'tab:cyan', 'tab:red', 'tab:blue']
-
+# How I train ANN. I guess classification will be very similar
+X_train_torch = torch.Tensor(X_train)
+y_train_torch = torch.Tensor(y_train)
+X_test_torch = torch.Tensor(X_test)
 
 N, M = X_train.shape
-CV = KFold(n_splits=10, shuffle=True)
-n_hidden_units = 1
-model = lambda: torch.nn.Sequential(
-                    torch.nn.Linear(M, n_hidden_units), #M features to n_hidden_units
-                    torch.nn.Tanh(),   # 1st transfer function,
-                    torch.nn.Linear(n_hidden_units, 1), # n_hidden_units to 1 output neuron
-                    # no final tranfer function, i.e. "linear output"
-                    )
-loss_fn = torch.nn.MSELoss()
+loss_fn = torch.nn.MSELoss() # probably should be changed to sth else
 max_iter = 10000
-print('Training model of type:\n{}\n'.format(str(model())))
+h = 1 # This is to be optimized (like regularization befor)
 
-# Do cross-validation:
-errors = [] 
-for k, (train_index, test_index) in enumerate(CV.split(X_train)): 
-    print('\nCrossvalidation fold: {0}/{1}'.format(k+1, 10))    
-    
-    X_train_CV = torch.Tensor(X_train[train_index,:] )
-    y_train_CV = torch.Tensor(y_train[train_index] )
-    # print(test_index)
-    X_valid_CV = torch.Tensor(X_train[test_index,:] )
-    y_valid_CV = torch.Tensor(y_train[test_index] )
-    
-    net, final_loss, learning_curve = train_neural_net(model,
-                                                       loss_fn,
-                                                       X=X_train_CV,
-                                                       y=y_train_CV,
-                                                       n_replicates=3,
-                                                       max_iter=max_iter)
-    
-    print('\n\tBest loss: {}\n'.format(final_loss))
+model = lambda: torch.nn.Sequential(
+                    torch.nn.Linear(M, h),
+                    torch.nn.Tanh(),
+                    torch.nn.Linear(h, 1),
+                    torch.nn.Softmax()
+                    )
 
-    # Determine estimated class labels for test set
-    y_test_est = net(X_valid_CV)
-    
-    # Determine errors and errors
-    se = (y_test_est.float()-y_valid_CV.float())**2 # squared error
-    mse = (sum(se).type(torch.float)/len(y_valid_CV)).data.numpy() #mean
-    errors.append(mse) # store error rate for current CV fold 
-    
-    # Display the learning curve for the best net in the current fold
-    h, = summaries_axes[0].plot(learning_curve, color=color_list[k])
-    h.set_label('CV fold {0}'.format(k+1))
-    summaries_axes[0].set_xlabel('Iterations')
-    summaries_axes[0].set_xlim((0, max_iter))
-    summaries_axes[0].set_ylabel('Loss')
-    summaries_axes[0].set_title('Learning curves')
+net, final_loss, learning_curve = train_neural_net(model,
+                                                loss_fn,
+                                                X=X_train_torch,
+                                                y=y_train_torch,
+                                                n_replicates=3,
+                                                max_iter=max_iter)
 
-################################################################################
-### Create summary table
-################################################################################
-# %%
+ANN_result = accuracy_score(y_test, net(X_test_torch).detach().numpy())
+
+
+
+# How should the 2 layer CV work
+# A lot of code I know but you need to replace my algorithms with yours - places separated with ## - ##
 K1 = 5
 K2 = 5
 
@@ -219,16 +152,18 @@ for k_outter, (train_outter, test_outter) in enumerate(outter_CV.split(X_train))
         X_valid_inner_torch = torch.Tensor(X_valid_inner)
         y_valid_inner_torch = torch.Tensor(y_valid_inner)
 
-        # Regularization
+        # Here should go log reg
+        ######################################################################################################
         regression = LinearRegression().fit(X_train_inner, y_train_inner)
         regularization_errors[0, k_inner] = mean_squared_error(y_valid_inner, regression.predict(X_valid_inner))
 
         for i, alpha in enumerate(alphas):
             ridge = Ridge(alpha).fit(X_train_inner, y_train_inner)
             regularization_errors[i + 1, k_inner] = mean_squared_error(y_valid_inner, ridge.predict(X_valid_inner))
+        #######################################################################################################
 
-
-        # ANN
+        # Here should go your ANN
+        #######################################################################################################
         N, M = X_train_inner.shape
 
         for i, h in enumerate(hs):     
@@ -247,25 +182,30 @@ for k_outter, (train_outter, test_outter) in enumerate(outter_CV.split(X_train))
                                                             max_iter=max_iter)
 
             ANN_errors[i, k_inner] = mean_squared_error(y_valid_inner, net(X_valid_inner_torch).detach().numpy())
-
+        ##########################################################################################################
 
     # Regularization
     regularization_errors = np.mean(regularization_errors, axis = 1)
     best_alpha = ([0] + alphas)[regularization_errors.argmin()]
     best_alphas[k_outter] = best_alpha
     
+    # Here log reg
+    ##############################################################################################################
     if best_alpha == 0:
         regression = LinearRegression().fit(X_train_outter, y_train_outter)
     else:
         regression = Ridge(best_alpha).fit(X_train_outter, y_train_outter)
 
     regularization_best_errors[k_outter] = mean_squared_error(y_valid_outter, regression.predict(X_valid_outter))
+    #############################################################################################################
 
     # ANN
     ANN_errors = np.mean(ANN_errors, axis = 1)
     best_h = hs[ANN_errors.argmin()]
     best_hs[k_outter] = best_h
 
+    # Here ANN
+    ###########################################################################################################
     N, M = X_train_outter.shape
     model = lambda: torch.nn.Sequential(
                         torch.nn.Linear(M, best_h), #M features to n_hidden_units
@@ -282,61 +222,8 @@ for k_outter, (train_outter, test_outter) in enumerate(outter_CV.split(X_train))
                                                     max_iter=max_iter)
 
     ANN_best_errors[k_outter] = mean_squared_error(y_valid_outter, net(X_valid_outter_torch).detach().numpy())
+    ############################################################################################################
 
     # Dummy
     dummy = DummyRegressor().fit(X_train_outter, y_train_outter)
     dummy_errors[k_outter] = mean_squared_error(y_valid_outter, dummy.predict(X_valid_outter))
-
-
-# %%
-
-pd.concat([
-    pd.DataFrame([1,2,3,4,5]),
-    pd.DataFrame(best_hs),
-    pd.DataFrame(ANN_best_errors),
-    pd.DataFrame(best_alphas),
-    pd.DataFrame(regularization_best_errors),
-    pd.DataFrame(dummy_errors)
-], axis = 1).round(2)
-
-
-# Best models
-# %%
-regression = Ridge(1.5).fit(X_train, y_train)
-ridge_results = (y_test - regression.predict(X_test))**2
-
-X_train_torch = torch.Tensor(X_train)
-y_train_torch = torch.Tensor(y_train)
-X_test_torch = torch.Tensor(X_test)
-
-N, M = X_train.shape
-loss_fn = torch.nn.MSELoss()
-max_iter = 10000
-model = lambda: torch.nn.Sequential(
-                    torch.nn.Linear(M, 5), #M features to n_hidden_units
-                    torch.nn.Tanh(),   # 1st transfer function,
-                    torch.nn.Linear(5, 1), # n_hidden_units to 1 output neuron
-                    # no final tranfer function, i.e. "linear output"
-                    )
-
-net, final_loss, learning_curve = train_neural_net(model,
-                                                loss_fn,
-                                                X=X_train_torch,
-                                                y=y_train_torch,
-                                                n_replicates=3,
-                                                max_iter=max_iter)
-
-ANN_results = (y_test - net(X_test_torch).detach().numpy())**2
-
-dummy = DummyRegressor().fit(X_train, y_train)
-dummy_reslts = (y_test - dummy.predict(X_test))**2
-
-
-# %%
-pd.DataFrame({
-    'Comparison': ['Dummy - Regression', 'Dummy - ANN', 'Regression - ANN'],
-    'Estimate': [np.mean(dummy_reslts - ridge_results), np.mean(dummy_reslts - ANN_results), np.mean(ridge_results - ANN_results)],
-    'P-value': [ttest_ind(dummy_reslts.reshape(1, -1)[0], ridge_results.reshape(1, -1)[0], axis = None)[1],
-    ttest_ind(dummy_reslts.reshape(1, -1)[0], ANN_results.reshape(1, -1)[0], axis = None)[1],
-    ttest_ind(ridge_results.reshape(1, -1)[0], ANN_results.reshape(1, -1)[0], axis = None)[1]]
-    })
